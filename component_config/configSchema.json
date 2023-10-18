@@ -24,6 +24,7 @@
       "propertyOrder": 3
     },
     "destination_options": {
+      "title": "Destination Options",
       "propertyOrder": 10,
       "properties": {
       "beautify": {

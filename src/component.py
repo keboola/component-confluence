@@ -42,7 +42,7 @@ class Component(ComponentBase):
             else:
                 logging.info(f"No last_run found in statefile, using default timestamp: {self.last_run}")
 
-        table_out = self.create_out_table_definition("confluence_pages")
+        table_out = self.create_out_table_definition("confluence_pages", primary_key=["id"])
 
         client = ConfluenceClient(url, username, token)
         fieldnames = ["id", "created_date", "last_updated_date", "title", "creator", "last_modifier", "url", "space",
@@ -54,6 +54,7 @@ class Component(ComponentBase):
             for page in client.get_confluence_pages(timestamp_from=self.last_run):
                 writer.writerow(page)
 
+        self.write_manifest(table_out)
         self.write_state_file({"last_run": self.current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'})
 
 

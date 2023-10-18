@@ -23,17 +23,21 @@
       "title": "API token",
       "propertyOrder": 3
     },
-    "beautify": {
-      "type": "boolean",
-      "format": "checkbox",
-      "title": "Beautify text",
-      "propertyOrder": 4
-    },
-    "incremental": {
-      "type": "boolean",
-      "format": "checkbox",
-      "title": "Incremental",
-      "propertyOrder": 5
-    }
+    "destination_options": {
+      "propertyOrder": 10,
+      "properties": {
+      "beautify": {
+        "type": "boolean",
+        "format": "checkbox",
+        "title": "Beautify text",
+        "propertyOrder": 11
+      },
+      "incremental": {
+        "type": "boolean",
+        "format": "checkbox",
+        "title": "Incremental",
+        "propertyOrder": 12
+      }
+    }}
   }
 }

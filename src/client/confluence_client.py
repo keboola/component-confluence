@@ -23,6 +23,7 @@ class ConfluenceClient:
         self.confluence = Confluence(
             url=confluence_url, username=confluence_username, password=confluence_password
         )
+        self.fetched_total = 0
 
     def get_confluence_pages(self, timestamp_from: str = None, beautify: bool = True, limit: int = 100) -> dict:
         spaces = self.confluence.get_all_spaces()
@@ -48,6 +49,7 @@ class ConfluenceClient:
 
                 if not timestamp_from or (timestamp_from and last_updated > timestamp_from):
                     yield from self._build_result(results, metadata, beautify)
+                    self.fetched_total += 1
 
                 if page.get("size") == limit:
                     start += limit

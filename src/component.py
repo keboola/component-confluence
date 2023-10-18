@@ -58,6 +58,8 @@ class Component(ComponentBase):
         self.write_manifest(table_out)
         self.write_state_file({"last_run": self.current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'})
 
+        logging.info(f"The component has fetched {client.fetched_total} new Confluence documents.")
+
 
 """
         Main entrypoint

@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 
 from datetime import datetime
 import logging
+from requests.exceptions import HTTPError, InvalidSchema
 
 
 rename_map = {
@@ -18,6 +19,10 @@ rename_map = {
 }
 
 
+class ConfluenceClientException(Exception):
+    pass
+
+
 class ConfluenceClient:
     def __init__(self, confluence_url, confluence_username, confluence_password):
         self.confluence = Confluence(
@@ -26,7 +31,12 @@ class ConfluenceClient:
         self.fetched_total = 0
 
     def get_confluence_pages(self, timestamp_from: str = None, beautify: bool = True, limit: int = 100) -> dict:
-        spaces = self.confluence.get_all_spaces()
+        try:
+            spaces = self.confluence.get_all_spaces()
+        except HTTPError as e:
+            raise ConfluenceClientException(f"HTTPError occured, please check your credentials. Details: {e}")
+        except InvalidSchema as e:
+            raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. Details: {e}")
 
         if timestamp_from:
             timestamp_from = datetime.strptime(timestamp_from, "%Y-%m-%dT%H:%M:%S.%fZ")

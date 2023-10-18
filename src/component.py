@@ -5,7 +5,7 @@ from datetime import datetime
 from keboola.component.base import ComponentBase
 from keboola.component.exceptions import UserException
 
-from client.confluence_client import ConfluenceClient
+from client.confluence_client import ConfluenceClient, ConfluenceClientException
 
 # configuration variables
 KEY_USERNAME = 'username'
@@ -52,8 +52,11 @@ class Component(ComponentBase):
         with open(table_out.full_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            for page in client.get_confluence_pages(timestamp_from=self.last_run):
-                writer.writerow(page)
+            try:
+                for page in client.get_confluence_pages(timestamp_from=self.last_run):
+                    writer.writerow(page)
+            except ConfluenceClientException as e:
+                raise UserException(f"Cannot fetch data from Confluence, error: {e}")
 
         self.write_manifest(table_out)
         self.write_state_file({"last_run": self.current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'})

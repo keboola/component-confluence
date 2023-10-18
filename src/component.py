@@ -1,7 +1,3 @@
-"""
-Template Component main class.
-
-"""
 import csv
 import logging
 from datetime import datetime
@@ -9,68 +5,56 @@ from datetime import datetime
 from keboola.component.base import ComponentBase
 from keboola.component.exceptions import UserException
 
-# configuration variables
-KEY_API_TOKEN = '#api_token'
-KEY_PRINT_HELLO = 'print_hello'
+from client.confluence_client import ConfluenceClient
 
-# list of mandatory parameters => if some is missing,
-# component will fail with readable message on initialization.
-REQUIRED_PARAMETERS = [KEY_PRINT_HELLO]
-REQUIRED_IMAGE_PARS = []
+# configuration variables
+KEY_USERNAME = 'username'
+KEY_URL = 'url'
+KEY_API_TOKEN = '#api_token'
+KEY_BEAUTIFY = 'beautify'
+KEY_INCREMENTAL = 'incremental'
+
+REQUIRED_PARAMETERS = [KEY_USERNAME, KEY_URL, KEY_API_TOKEN]
 
 
 class Component(ComponentBase):
-    """
-        Extends base class for general Python components. Initializes the CommonInterface
-        and performs configuration validation.
-
-        For easier debugging the data folder is picked up by default from `../data` path,
-        relative to working directory.
-
-        If `debug` parameter is present in the `config.json`, the default logger is set to verbose DEBUG mode.
-    """
 
     def __init__(self):
         super().__init__()
+        self.current_time = datetime.utcnow()
+        self.last_run = "2000-01-01T00:00:00.000Z"
 
     def run(self):
-        """
-        Main execution code
-        """
 
-        # ####### EXAMPLE TO REMOVE
-        # check for missing configuration parameters
         self.validate_configuration_parameters(REQUIRED_PARAMETERS)
-        self.validate_image_parameters(REQUIRED_IMAGE_PARS)
         params = self.configuration.parameters
-        # Access parameters in data/config.json
-        if params.get(KEY_PRINT_HELLO):
-            logging.info("Hello World")
 
-        # get last state data/in/state.json from previous run
-        previous_state = self.get_state_file()
-        logging.info(previous_state.get('some_state_parameter'))
+        url = params.get(KEY_URL)
+        username = params.get(KEY_USERNAME)
+        token = params.get(KEY_API_TOKEN)
+        incremental = params.get(KEY_INCREMENTAL)
 
-        # Create output table (Tabledefinition - just metadata)
-        table = self.create_out_table_definition('output.csv', incremental=True, primary_key=['timestamp'])
+        if incremental:
+            statefile = self.get_state_file()
+            if statefile.get("last_run"):
+                self.last_run = statefile.get("last_run")
+                logging.info(f"Using last_run from statefile: {self.last_run}")
+            else:
+                logging.info(f"No last_run found in statefile, using default timestamp: {self.last_run}")
 
-        # get file path of the table (data/out/tables/Features.csv)
-        out_table_path = table.full_path
-        logging.info(out_table_path)
+        table_out = self.create_out_table_definition("confluence_pages")
 
-        # DO whatever and save into out_table_path
-        with open(table.full_path, mode='wt', encoding='utf-8', newline='') as out_file:
-            writer = csv.DictWriter(out_file, fieldnames=['timestamp'])
+        client = ConfluenceClient(url, username, token)
+        fieldnames = ["id", "created_date", "last_updated_date", "title", "creator", "last_modifier", "url", "space",
+                      "text"]
+
+        with open(table_out.full_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerow({"timestamp": datetime.now().isoformat()})
+            for page in client.get_confluence_pages(timestamp_from=self.last_run):
+                writer.writerow(page)
 
-        # Save table manifest (output.csv.manifest) from the tabledefinition
-        self.write_manifest(table)
-
-        # Write new state - will be available next run
-        self.write_state_file({"some_state_parameter": "value"})
-
-        # ####### EXAMPLE TO REMOVE END
+        self.write_state_file({"last_run": self.current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'})
 
 
 """

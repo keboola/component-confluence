@@ -2,18 +2,38 @@
   "type": "object",
   "title": "extractor configuration",
   "required": [
-    "print_hello"
+    "url",
+    "username",
+    "#api_token"
   ],
   "properties": {
-    "print_hello": {
-      "type": "boolean",
-      "title": "Print Hello",
+    "url": {
+      "type": "string",
+      "title": "Confluence URL",
       "propertyOrder": 1
     },
-    "debug": {
-      "type": "boolean",
-      "title": "Debug",
+    "username": {
+      "type": "string",
+      "title": "Username",
       "propertyOrder": 2
+    },
+    "#api_token": {
+      "type": "string",
+      "format": "token",
+      "title": "API token",
+      "propertyOrder": 3
+    },
+    "beautify": {
+      "type": "boolean",
+      "format": "checkbox",
+      "title": "Beautify text",
+      "propertyOrder": 4
+    },
+    "incremental": {
+      "type": "boolean",
+      "format": "checkbox",
+      "title": "Incremental",
+      "propertyOrder": 5
     }
   }
 }

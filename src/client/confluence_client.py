@@ -3,11 +3,6 @@ from bs4 import BeautifulSoup
 
 from datetime import datetime
 import logging
-import re
-
-
-def sanitize_filename(filename):
-    return re.sub(r"[/\\]", "_", filename)
 
 
 rename_map = {

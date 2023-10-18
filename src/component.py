@@ -32,7 +32,7 @@ class Component(ComponentBase):
         url = params.get(KEY_URL)
         username = params.get(KEY_USERNAME)
         token = params.get(KEY_API_TOKEN)
-        incremental = params.get(KEY_INCREMENTAL)
+        incremental = params.get(KEY_INCREMENTAL, False)
 
         if incremental:
             statefile = self.get_state_file()
@@ -42,7 +42,8 @@ class Component(ComponentBase):
             else:
                 logging.info(f"No last_run found in statefile, using default timestamp: {self.last_run}")
 
-        table_out = self.create_out_table_definition("confluence_pages", primary_key=["id"])
+        table_out = self.create_out_table_definition("confluence_pages", primary_key=["id"],
+                                                     incremental=incremental)
 
         client = ConfluenceClient(url, username, token)
         fieldnames = ["id", "created_date", "last_updated_date", "title", "creator", "last_modifier", "url", "space",

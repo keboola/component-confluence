@@ -54,37 +54,36 @@ class ConfluenceClient:
                     logging.info(f"No results for {space['name']}")
                     break
 
-                metadata = self._get_metadata(results)
-                last_updated = datetime.strptime(metadata.get("LastUpdatedDate"), "%Y-%m-%dT%H:%M:%S.%fZ")
+                for result in results:
+                    metadata = self._get_metadata(result)
+                    last_updated = datetime.strptime(metadata.get("LastUpdatedDate"), "%Y-%m-%dT%H:%M:%S.%fZ")
 
-                if not timestamp_from or (timestamp_from and last_updated > timestamp_from):
-                    yield from self._build_result(results, metadata, beautify)
-                    self.fetched_total += 1
+                    if not timestamp_from or (timestamp_from and last_updated > timestamp_from):
+                        yield from self._build_result(result, metadata, beautify)
 
                 if page.get("size") == limit:
                     start += limit
                 else:
                     break
 
-    @staticmethod
-    def _build_result(results: list, metadata: dict, beautify: bool = True):
-        for result in results:
-            logging.debug(f'Fetching document from Space: {metadata["Space"]} with document id {result["id"]}')
+    def _build_result(self, result: dict, metadata: dict, beautify: bool = True):
+        logging.debug(f'Fetching document from Space: {metadata["Space"]} with document id {result["id"]}')
 
-            text = result["body"]["storage"]["value"]
+        text = result["body"]["storage"]["value"]
 
-            if beautify:
-                soup = BeautifulSoup(text, "html.parser")
-                text = soup.get_text()
-                text = result["title"] + "\n\n" + text
+        if beautify:
+            soup = BeautifulSoup(text, "html.parser")
+            text = soup.get_text()
+            text = result["title"] + "\n\n" + text
 
-            metadata["text"] = text
-            data = {rename_map[key]: metadata[key] for key in metadata.keys()}
+        metadata["text"] = text
+        data = {rename_map[key]: metadata[key] for key in metadata.keys()}
 
-            yield data
+        self.fetched_total += 1
+        yield data
 
-    def _get_metadata(self, results):
-        page_id = results[0].get("id")
+    def _get_metadata(self, result):
+        page_id = result.get("id")
         if page_id:
             data = self.confluence.get_page_by_id(page_id)
             space = data["space"].get("name", "")

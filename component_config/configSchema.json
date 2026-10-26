@@ -27,18 +27,72 @@
       "title": "Destination Options",
       "propertyOrder": 10,
       "properties": {
-      "beautify": {
-        "type": "boolean",
-        "format": "checkbox",
-        "title": "Beautify text",
-        "propertyOrder": 11
-      },
-      "incremental": {
-        "type": "boolean",
-        "format": "checkbox",
-        "title": "Incremental",
-        "propertyOrder": 12
+        "beautify": {
+          "type": "boolean",
+          "format": "checkbox",
+          "title": "Beautify text",
+          "propertyOrder": 11
+        },
+        "incremental": {
+          "type": "boolean",
+          "format": "checkbox",
+          "title": "Incremental",
+          "propertyOrder": 12
+        }
       }
-    }}
+    },
+    "attachments": {
+      "type": "object",
+      "title": "Attachments",
+      "propertyOrder": 20,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "format": "checkbox",
+          "title": "Extract attachments",
+          "default": false,
+          "description": "Off by default. When on, the component also creates the table <code>confluence_attachments</code> with metadata of the attachments of every extracted page.",
+          "propertyOrder": 1
+        },
+        "download_files": {
+          "type": "boolean",
+          "format": "checkbox",
+          "title": "Download the files",
+          "default": false,
+          "description": "When on, the component also saves the attachment files (images, PDFs and other binaries) to Keboola File Storage, tagged <code>confluence-attachment</code>. The column <code>file_name</code> links a table row to its file.",
+          "propertyOrder": 2,
+          "options": {
+            "dependencies": {
+              "enabled": true
+            }
+          }
+        },
+        "max_file_size_mb": {
+          "type": "number",
+          "title": "Maximum file size (MB)",
+          "default": 50,
+          "minimum": 0,
+          "description": "The component does not download a file larger than this. Its metadata stays in the table. Use 0 for no limit.",
+          "propertyOrder": 3,
+          "options": {
+            "dependencies": {
+              "download_files": true
+            }
+          }
+        },
+        "media_types": {
+          "type": "string",
+          "title": "Media type filter",
+          "default": "",
+          "description": "Optional. A comma separated list of media type prefixes, for example <code>image/, application/pdf</code>. Only matching files are downloaded; the table always holds every attachment. Empty means all files.",
+          "propertyOrder": 4,
+          "options": {
+            "dependencies": {
+              "download_files": true
+            }
+          }
+        }
+      }
+    }
   }
 }

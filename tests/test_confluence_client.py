@@ -50,20 +50,34 @@ class TestSanitizeFileName(unittest.TestCase):
 
 class TestAttachmentRow(unittest.TestCase):
 
-    def test_builds_row_with_absolute_download_url(self):
-        row = ConfluenceClient._build_attachment_row(
-            _attachment(), "Confluence - Space-123", "Space", "https://example.atlassian.net/wiki")
+    def test_cloud_uses_the_supported_rest_download_route(self):
+        """`_links.download` points at a route Atlassian removed for API token callers."""
+        row = _client()._build_attachment_row(
+            _attachment(), "Confluence - Space-123", "Space", "https://example.atlassian.net/wiki", "123")
+        self.assertEqual(
+            row["download_url"],
+            "https://example.atlassian.net/wiki/rest/api/content/123/child/attachment/att1/download")
         self.assertEqual(row["id"], "att1")
         self.assertEqual(row["page_id"], "Confluence - Space-123")
         self.assertEqual(row["space"], "Space")
         self.assertEqual(row["media_type"], "image/png")
         self.assertEqual(row["file_size"], 1234)
         self.assertEqual(row["creator"], "Jane")
-        self.assertEqual(row["download_url"], "https://example.atlassian.net/wiki/download/a.png")
         self.assertEqual(row["file_name"], "")
 
+    def test_server_keeps_the_original_download_link(self):
+        """Self hosted Confluence still serves /download/attachments/..., so keep using it there."""
+        with mock.patch("client.confluence_client.Confluence"):
+            client = ConfluenceClient("https://wiki.example.com", "user", "token")
+        self.assertFalse(client.is_cloud)
+        row = client._build_attachment_row(
+            _attachment(), "page", "Space", "https://wiki.example.com", "123")
+        self.assertEqual(row["download_url"], "https://wiki.example.com/download/a.png")
+
     def test_tolerates_missing_fields(self):
-        row = ConfluenceClient._build_attachment_row({"id": "att9"}, "page", "Space", "https://example.net/wiki")
+        with mock.patch("client.confluence_client.Confluence"):
+            client = ConfluenceClient("https://wiki.example.com", "user", "token")
+        row = client._build_attachment_row({"id": "att9"}, "page", "Space", "https://wiki.example.com", "")
         self.assertEqual(row["id"], "att9")
         self.assertEqual(row["download_url"], "")
         self.assertEqual(row["creator"], "")
@@ -114,8 +128,10 @@ class TestDownloadAttachment(unittest.TestCase):
     def _row(self, size=10, url="https://example.atlassian.net/wiki/download/a.png"):
         return {"id": "att1", "title": "a.png", "file_size": size, "download_url": url}
 
-    def _mock_response(self, client, chunks):
+    def _mock_response(self, client, chunks, status_code=200, content_type="image/png"):
         response = mock.MagicMock()
+        response.status_code = status_code
+        response.headers = {"Content-Type": content_type}
         response.iter_content.return_value = chunks
         response.__enter__.return_value = response
         client.confluence._session.get.return_value = response
@@ -158,6 +174,29 @@ class TestDownloadAttachment(unittest.TestCase):
         client = _client()
         self.assertFalse(client.download_attachment(self._row(url=""), self.target, max_bytes=1024))
         self.assertEqual(client.attachments_skipped, 1)
+
+    def test_missing_binary_is_a_warning(self):
+        """An attachment orphaned in the Atlassian media storage answers 404 on every route."""
+        client = _client()
+        self._mock_response(client, [], status_code=404)
+        self.assertFalse(client.download_attachment(self._row(), self.target, max_bytes=1024))
+        self.assertFalse(os.path.exists(self.target))
+        self.assertEqual(client.attachments_failed, 1)
+
+    def test_html_response_is_never_saved_as_the_file(self):
+        client = _client()
+        self._mock_response(client, [b"<html>login</html>"], content_type="text/html; charset=utf-8")
+        self.assertFalse(client.download_attachment(self._row(), self.target, max_bytes=1024))
+        self.assertFalse(os.path.exists(self.target))
+        self.assertEqual(client.attachments_failed, 1)
+
+    def test_empty_file_is_a_warning(self):
+        client = _client()
+        self._mock_response(client, [])
+        self.assertFalse(client.download_attachment(self._row(), self.target, max_bytes=1024))
+        self.assertFalse(os.path.exists(self.target))
+        self.assertEqual(client.attachments_failed, 1)
+        self.assertEqual(client.attachments_downloaded, 0)
 
     def test_skips_a_non_http_url(self):
         client = _client()

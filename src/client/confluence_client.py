@@ -64,6 +64,10 @@ class ConfluenceClient:
         # The attachment download link comes from the API response. Only the configured host may
         # receive the credentials of the session, so the resolved host is checked against this one.
         self.allowed_host = (urlparse(confluence_url).hostname or "").lower()
+        # Confluence Cloud removed the /download/attachments/... route for API token callers
+        # (Atlassian CHANGE-2735, removed 2025-11-06). Cloud must use the REST attachment route.
+        self.is_cloud = getattr(self.confluence, "cloud", False) is True or \
+            self.allowed_host.endswith(".atlassian.net")
         self.fetched_total = 0
         self.attachments_total = 0
         self.attachments_downloaded = 0
@@ -184,23 +188,34 @@ class ConfluenceClient:
 
             for attachment in results:
                 self.attachments_total += 1
-                yield self._build_attachment_row(attachment, page_key, space, base)
+                yield self._build_attachment_row(attachment, page_key, space, base, page_id)
 
             if len(results) == limit:
                 start += limit
             else:
                 break
 
-    @staticmethod
-    def _build_attachment_row(attachment: dict, page_key: str, space: str, base: str) -> dict:
+    def _build_attachment_row(self, attachment: dict, page_key: str, space: str, base: str,
+                              page_id: str) -> dict:
         extensions = attachment.get("extensions") or {}
         version = attachment.get("version") or {}
         history = attachment.get("history") or {}
         links = attachment.get("_links") or {}
         download_path = links.get("download", "")
+        attachment_id = attachment.get("id", "")
+
+        if self.is_cloud and attachment_id and page_id:
+            # The supported Cloud route. `_links.download` still points at the removed
+            # /download/attachments/... endpoint, which answers 404 for API token callers.
+            download_url = f"{base.rstrip('/')}/rest/api/content/{page_id}/child/attachment/" \
+                           f"{attachment_id}/download"
+        elif download_path:
+            download_url = urljoin(base + "/", download_path.lstrip("/"))
+        else:
+            download_url = ""
 
         return {
-            "id": attachment.get("id", ""),
+            "id": attachment_id,
             "page_id": page_key,
             "space": space,
             "title": attachment.get("title", ""),
@@ -209,7 +224,7 @@ class ConfluenceClient:
             "created_date": history.get("createdDate", ""),
             "last_updated_date": version.get("when", ""),
             "creator": (history.get("createdBy") or {}).get("displayName", ""),
-            "download_url": urljoin(base + "/", download_path.lstrip("/")) if download_path else "",
+            "download_url": download_url,
             "file_name": "",
         }
 
@@ -252,7 +267,23 @@ class ConfluenceClient:
         written = 0
         try:
             with self.confluence._session.get(url, stream=True, timeout=120) as response:
+                if response.status_code == 404:
+                    # The attachment record exists but its binary does not. This happens with
+                    # attachments that are orphaned in the Atlassian media storage.
+                    logging.warning(f"Confluence has no file for attachment '{title}'. Its metadata is "
+                                    f"still in the confluence_attachments table.")
+                    self.attachments_failed += 1
+                    return False
                 response.raise_for_status()
+
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                if content_type.startswith("text/html"):
+                    # A login or error page must never be saved with the name of the attachment.
+                    logging.warning(f"Confluence returned a web page instead of the file for attachment "
+                                    f"'{title}'. The file is not downloaded.")
+                    self.attachments_failed += 1
+                    return False
+
                 with open(target_path, "wb") as out_file:
                     for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                         if not chunk:
@@ -281,6 +312,13 @@ class ConfluenceClient:
         if max_bytes and written > max_bytes:
             self._remove_if_exists(target_path)
             self.attachments_skipped += 1
+            return False
+
+        if written == 0:
+            logging.warning(f"Confluence returned an empty file for attachment '{title}'. "
+                            f"The file is not downloaded.")
+            self._remove_if_exists(target_path)
+            self.attachments_failed += 1
             return False
 
         self.attachments_downloaded += 1

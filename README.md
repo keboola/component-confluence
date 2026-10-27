@@ -123,6 +123,12 @@ not downloaded.
 - A page the account cannot read the attachments of is logged as a warning and the run continues. The
   page itself is still extracted. The same applies to a single file that fails to download.
 - The component downloads a file only from the Confluence host you configured.
+- On Confluence Cloud the component downloads a file through
+  `/rest/api/content/{page id}/child/attachment/{attachment id}/download`. The `download` link in the
+  attachment metadata points at `/download/attachments/...`, which Atlassian removed for API token
+  callers on 2025-11-06. Self hosted Confluence keeps using that link.
+- Some attachments are orphaned in the Atlassian media storage and have no file. Confluence answers
+  404 for them. The component logs a warning and keeps their metadata in the table.
 - A full backup of a large Confluence site can be many gigabytes. Start with a media type filter or a
   low size limit, check the result, then widen it.
 

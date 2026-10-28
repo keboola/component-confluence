@@ -171,6 +171,16 @@ class TestRunOutputs(unittest.TestCase):
         _, kwargs = client.download_attachment.call_args
         self.assertEqual(kwargs["max_bytes"], 0)
 
+    def test_space_filter_is_passed_to_the_client(self):
+        client = self._client()
+        self._run(dict(self.BASE, spaces="CSU, ENG"), client)
+        self.assertEqual(client.iter_pages.call_args.kwargs["space_keys"], ["CSU", "ENG"])
+
+    def test_no_space_filter_for_an_existing_configuration(self):
+        client = self._client()
+        self._run(dict(self.BASE), client)
+        self.assertEqual(client.iter_pages.call_args.kwargs["space_keys"], [])
+
     def test_pages_table_columns_are_unchanged(self):
         client = self._client()
         self._run(dict(self.BASE), client)

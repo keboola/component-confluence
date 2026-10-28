@@ -80,20 +80,54 @@ class ConfluenceClient:
         for _, _, page_row in self.iter_pages(timestamp_from=timestamp_from, beautify=beautify, limit=limit):
             yield page_row
 
-    def iter_pages(self, timestamp_from: str = None, beautify: bool = True, limit: int = 100):
-        """Yield (raw_page_id, space_name, page_row) for every page that passes the incremental filter."""
-        try:
-            spaces = self.confluence.get_all_spaces()
-        except HTTPError as e:
-            raise ConfluenceClientException(f"HTTPError occured, please check your credentials. Details: {e}")
-        except InvalidSchema as e:
-            raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. Details: {e}")
+    def _get_spaces(self, space_keys: list = None) -> list:
+        """Return the spaces to read.
+
+        Without a filter this makes the same single `get_all_spaces` call as before. With a filter each
+        space is read by key, so a space is found even when the account can see very many spaces.
+        """
+        if not space_keys:
+            try:
+                spaces = self.confluence.get_all_spaces()
+            except HTTPError as e:
+                raise ConfluenceClientException(f"HTTPError occured, please check your credentials. "
+                                                f"Details: {e}")
+            except InvalidSchema as e:
+                raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
+                                                f"Details: {e}")
+            return spaces.get("results")
+
+        resolved = []
+        for key in space_keys:
+            try:
+                space = self.confluence.get_space(key)
+            except InvalidSchema as e:
+                raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
+                                                f"Details: {e}")
+            except (HTTPError, ApiError) as e:
+                raise ConfluenceClientException(
+                    f"Cannot read the Confluence space '{key}'. Check that the space key is correct and "
+                    f"that the account can read the space. The space key is the short code in the page "
+                    f"address, for example 'CSU' in /spaces/CSU/pages/123. Details: {e}")
+            if not isinstance(space, dict) or not space.get("key"):
+                raise ConfluenceClientException(
+                    f"Confluence returned no space for the key '{key}'. Check that the space key is correct.")
+            resolved.append(space)
+        return resolved
+
+    def iter_pages(self, timestamp_from: str = None, beautify: bool = True, limit: int = 100,
+                   space_keys: list = None):
+        """Yield (raw_page_id, space_name, page_row) for every page that passes the incremental filter.
+
+        `space_keys` limits the run to those spaces. Empty or None reads every space the account can see.
+        """
+        space_list = self._get_spaces(space_keys)
 
         if timestamp_from:
             timestamp_from = datetime.strptime(timestamp_from, "%Y-%m-%dT%H:%M:%S.%fZ")
 
-        for space in spaces.get("results"):
-            logging.info(f"Downloading Confluence space: {space['name']}")
+        for space in space_list:
+            logging.info(f"Downloading Confluence space: {space['name']} ({space['key']})")
             start = 0
 
             while True:

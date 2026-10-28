@@ -16,6 +16,7 @@ KEY_API_TOKEN = '#api_token'
 KEY_BEAUTIFY = 'beautify'
 KEY_INCREMENTAL = 'incremental'
 KEY_GROUP_DESTINATION_OPTIONS = 'destination_options'
+KEY_SPACES = 'spaces'
 
 KEY_GROUP_ATTACHMENTS = 'attachments'
 KEY_ATTACHMENTS_ENABLED = 'enabled'
@@ -40,7 +41,11 @@ class Component(ComponentBase):
         self.validate_configuration_parameters(REQUIRED_PARAMETERS)
         url, username, token, beautify, incremental = self._init_parameters()
         attachment_options = self._init_attachment_options()
+        space_keys = self._init_space_keys()
         self.setup_last_run(incremental)
+
+        if space_keys:
+            logging.info(f"Reading only these Confluence spaces: {', '.join(space_keys)}.")
 
         table_out = self.create_out_table_definition("confluence_pages", primary_key=["id"], incremental=incremental)
         client = ConfluenceClient(url, username, token)
@@ -51,7 +56,8 @@ class Component(ComponentBase):
                 "confluence_attachments", primary_key=["id"], incremental=incremental
             )
 
-        self.write_confluence_data(client, beautify, table_out, attachments_out, attachment_options)
+        self.write_confluence_data(client, beautify, table_out, attachments_out, attachment_options,
+                                   space_keys)
 
         self.write_manifest(table_out)
         if attachments_out:
@@ -79,6 +85,19 @@ class Component(ComponentBase):
         beautify = destination_options.get(KEY_BEAUTIFY, False)
         incremental = destination_options.get(KEY_INCREMENTAL, False)
         return url, username, token, beautify, incremental
+
+    def _init_space_keys(self):
+        """Read the optional space filter. Empty means every space the account can see."""
+        raw = self.configuration.parameters.get(KEY_SPACES)
+        if raw is None or raw == "":
+            return []
+        if isinstance(raw, list):
+            keys = [str(item).strip() for item in raw]
+        else:
+            keys = [item.strip() for item in str(raw).split(",")]
+        keys = [key for key in keys if key]
+        # keep the order the user wrote, without duplicates
+        return list(dict.fromkeys(keys))
 
     def _init_attachment_options(self):
         """Read the optional `attachments` group. Attachments are off unless the user turns them on."""
@@ -120,7 +139,8 @@ class Component(ComponentBase):
             else:
                 logging.info(f"No last_run found in statefile, using default timestamp: {self.last_run}")
 
-    def write_confluence_data(self, client, beautify, table_out, attachments_out=None, attachment_options=None):
+    def write_confluence_data(self, client, beautify, table_out, attachments_out=None,
+                              attachment_options=None, space_keys=None):
         attachment_options = attachment_options or {}
         fieldnames = ["id", "created_date", "last_updated_date", "title", "creator", "last_modifier", "url", "space",
                       "text"]
@@ -137,7 +157,8 @@ class Component(ComponentBase):
                     attachments_writer = csv.DictWriter(attachments_file, fieldnames=ATTACHMENT_FIELDS)
                     attachments_writer.writeheader()
 
-                for page_id, space, page in client.iter_pages(timestamp_from=self.last_run, beautify=beautify):
+                for page_id, space, page in client.iter_pages(timestamp_from=self.last_run,
+                                                              beautify=beautify, space_keys=space_keys):
                     writer.writerow(page)
                     if attachments_writer:
                         self._write_page_attachments(client, attachments_writer, page_id, page.get("id", ""),

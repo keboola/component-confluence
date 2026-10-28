@@ -20,6 +20,7 @@ an AI assistant or documentation analytics.
 | Confluence URL (`url`) | yes | Address of your Confluence site. For Confluence Cloud (`*.atlassian.net`), `/wiki` is added automatically when missing. |
 | Username (`username`) | yes | The account to log in with. For Confluence Cloud, this is the account's email address. |
 | API token (`#api_token`) | yes | API token of that account. Used as the password for HTTP basic authentication. |
+| Spaces (`spaces`) | no | A comma separated list of space **keys**, for example `CSU, ENG`. Empty (default) means every space the account can read. See [Choosing spaces](#choosing-spaces). |
 | Beautify text (`destination_options.beautify`) | no | Off (default): `text` contains the page body in Confluence storage format (XHTML). On: `text` contains plain text, with the page title and an empty line in front of it. |
 | Incremental (`destination_options.incremental`) | no | Off (default): every run downloads all pages and overwrites the table. On: see [Incremental loading](#incremental-loading). |
 | Extract attachments (`attachments.enabled`) | no | Off (default). On: the component also writes the table `confluence_attachments`. See [Attachments](#attachments). |
@@ -35,6 +36,7 @@ an AI assistant or documentation analytics.
     "url": "https://your-domain.atlassian.net",
     "username": "name@example.com",
     "#api_token": "<API token>",
+    "spaces": "CSU, ENG",
     "destination_options": {
       "beautify": true,
       "incremental": true
@@ -48,6 +50,22 @@ an AI assistant or documentation analytics.
   }
 }
 ```
+
+## Choosing spaces
+
+By default the component reads every space the account can read. Use **Spaces** to read only some of
+them. Give the space **key**, not the space name.
+
+The space key is the short code in the address of a page. In
+`https://your-domain.atlassian.net/wiki/spaces/CSU/pages/123/Title`, the key is `CSU`.
+
+- The component reads only the listed spaces. It reads all of their pages, and their attachments when
+  attachments are on.
+- The order you write the keys is the order the component reads them.
+- If a key is wrong, or the account cannot read that space, the run stops with a message naming the
+  key. The component does not skip it silently.
+- Every run logs the name and the key of each space it reads, so you can find the keys you need from
+  one full run.
 
 ## Output
 
@@ -149,8 +167,9 @@ Each run still reads the metadata of every page, so a run with few changes takes
 
 ## Limitations
 
-- Spaces are read with a single request, so on sites with very many spaces some may be skipped.
-  The component logs the name of every space it downloads.
+- Without the **Spaces** filter, the spaces are read with a single request, so on sites with very many
+  spaces some may be skipped. With the filter, each space is read by its key, so it is always found.
+  The component logs the name and the key of every space it downloads.
 
 ## Development
 

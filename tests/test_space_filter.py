@@ -65,20 +65,56 @@ class TestSpaceResolution(unittest.TestCase):
         # the unpaginated listing is skipped entirely, so a space is found on a large site
         client.confluence.get_all_spaces.assert_not_called()
 
-    def test_an_unknown_key_stops_the_run_with_a_clear_message(self):
+    def test_a_space_name_is_accepted(self):
+        """The `space` column holds the name, so a user who copies from the output gives a name."""
+        client = _client()
+        client.confluence.get_space.side_effect = HTTPError("404 Not Found")
+        client.confluence.get_all_spaces.return_value = {"results": [
+            {"key": "ENG", "name": "Engineering Wiki"}, {"key": "CSU", "name": "Customer Success"}]}
+
+        spaces = client._get_spaces(["Engineering Wiki"])
+
+        self.assertEqual([space["key"] for space in spaces], ["ENG"])
+
+    def test_a_name_or_key_is_matched_ignoring_letter_case(self):
+        for entry in ("engineering wiki", "eng", "ENG", "  Engineering Wiki  "):
+            client = _client()
+            client.confluence.get_space.side_effect = HTTPError("404 Not Found")
+            client.confluence.get_all_spaces.return_value = {"results": [
+                {"key": "ENG", "name": "Engineering Wiki"}]}
+            self.assertEqual(client._get_spaces([entry])[0]["key"], "ENG", entry)
+
+    def test_an_exact_key_does_not_list_every_space(self):
+        client = _client()
+        client.confluence.get_space.return_value = {"key": "ENG", "name": "Engineering Wiki"}
+        client._get_spaces(["ENG"])
+        client.confluence.get_all_spaces.assert_not_called()
+
+    def test_a_key_match_wins_over_a_name_match(self):
+        client = _client()
+        client.confluence.get_space.side_effect = HTTPError("404")
+        client.confluence.get_all_spaces.return_value = {"results": [
+            {"key": "OTHER", "name": "ENG"}, {"key": "ENG", "name": "Engineering Wiki"}]}
+        self.assertEqual(client._get_spaces(["ENG"])[0]["key"], "ENG")
+
+    def test_an_unknown_space_lists_what_is_available(self):
         for error in (HTTPError("404 Not Found"), ApiError("no permission")):
             client = _client()
             client.confluence.get_space.side_effect = error
+            client.confluence.get_all_spaces.return_value = {"results": [
+                {"key": "ENG", "name": "Engineering Wiki"}]}
             with self.assertRaises(ConfluenceClientException) as caught:
                 client._get_spaces(["NOPE"])
-            self.assertIn("NOPE", str(caught.exception))
-            self.assertIn("space key", str(caught.exception))
+            message = str(caught.exception)
+            self.assertIn("NOPE", message)
+            self.assertIn("Engineering Wiki (ENG)", message)
 
-    def test_an_empty_space_response_stops_the_run(self):
+    def test_an_empty_space_response_falls_back_to_matching(self):
         client = _client()
         client.confluence.get_space.return_value = None
-        with self.assertRaises(ConfluenceClientException):
-            client._get_spaces(["NOPE"])
+        client.confluence.get_all_spaces.return_value = {"results": [
+            {"key": "ENG", "name": "Engineering Wiki"}]}
+        self.assertEqual(client._get_spaces(["Engineering Wiki"])[0]["key"], "ENG")
 
 
 class TestIterPagesUsesTheFilter(unittest.TestCase):

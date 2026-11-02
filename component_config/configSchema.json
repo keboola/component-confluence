@@ -27,7 +27,7 @@
       "type": "string",
       "title": "Spaces",
       "default": "",
-      "description": "Optional. A comma separated list of space <b>keys</b>, for example <code>CSU, ENG</code>. The space key is the short code in the page address, for example <code>CSU</code> in <code>/spaces/CSU/pages/123</code>. Empty means every space the account can read.",
+      "description": "Optional. A comma separated list of spaces, for example <code>Engineering Wiki, CSU</code>. Use the space name as it appears in the <code>space</code> column of the output, or the space key (the short code in the page address, <code>CSU</code> in <code>/spaces/CSU/pages/123</code>). Empty means every space the account can read.",
       "propertyOrder": 5
     },
     "destination_options": {

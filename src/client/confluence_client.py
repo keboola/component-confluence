@@ -80,40 +80,72 @@ class ConfluenceClient:
         for _, _, page_row in self.iter_pages(timestamp_from=timestamp_from, beautify=beautify, limit=limit):
             yield page_row
 
+    def _list_all_spaces(self) -> list:
+        try:
+            spaces = self.confluence.get_all_spaces()
+        except HTTPError as e:
+            raise ConfluenceClientException(f"HTTPError occured, please check your credentials. "
+                                            f"Details: {e}")
+        except InvalidSchema as e:
+            raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
+                                            f"Details: {e}")
+        return spaces.get("results")
+
     def _get_spaces(self, space_keys: list = None) -> list:
         """Return the spaces to read.
 
-        Without a filter this makes the same single `get_all_spaces` call as before. With a filter each
-        space is read by key, so a space is found even when the account can see very many spaces.
+        Without a filter this makes the same single `get_all_spaces` call as before.
+
+        With a filter, each entry can be a space key or a space name. The key is tried first, because
+        that is one cheap request. A name, or a key in different letter case, is then matched against
+        the list of spaces. The `space` column of the output table holds the name, so a user who copies
+        a value out of the extracted data gives a name here.
         """
         if not space_keys:
-            try:
-                spaces = self.confluence.get_all_spaces()
-            except HTTPError as e:
-                raise ConfluenceClientException(f"HTTPError occured, please check your credentials. "
-                                                f"Details: {e}")
-            except InvalidSchema as e:
-                raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
-                                                f"Details: {e}")
-            return spaces.get("results")
+            return self._list_all_spaces()
 
         resolved = []
-        for key in space_keys:
-            try:
-                space = self.confluence.get_space(key)
-            except InvalidSchema as e:
-                raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
-                                                f"Details: {e}")
-            except (HTTPError, ApiError) as e:
+        all_spaces = None
+        for entry in space_keys:
+            space = self._get_space_by_key(entry)
+
+            if space is None:
+                if all_spaces is None:
+                    all_spaces = self._list_all_spaces() or []
+                space = self._match_space(entry, all_spaces)
+
+            if space is None:
+                available = ", ".join(f"{item.get('name')} ({item.get('key')})"
+                                      for item in (all_spaces or []))
                 raise ConfluenceClientException(
-                    f"Cannot read the Confluence space '{key}'. Check that the space key is correct and "
-                    f"that the account can read the space. The space key is the short code in the page "
-                    f"address, for example 'CSU' in /spaces/CSU/pages/123. Details: {e}")
-            if not isinstance(space, dict) or not space.get("key"):
-                raise ConfluenceClientException(
-                    f"Confluence returned no space for the key '{key}'. Check that the space key is correct.")
+                    f"Cannot find the Confluence space '{entry}'. Give the space name or the space key. "
+                    f"The account can read these spaces: {available or 'none'}.")
+
             resolved.append(space)
         return resolved
+
+    def _get_space_by_key(self, key: str):
+        """Return the space with this exact key, or None when there is no such space."""
+        try:
+            space = self.confluence.get_space(key)
+        except InvalidSchema as e:
+            raise ConfluenceClientException(f"InvalidSchema error occured, please check Confluence url. "
+                                            f"Details: {e}")
+        except (HTTPError, ApiError):
+            return None
+        if isinstance(space, dict) and space.get("key"):
+            return space
+        return None
+
+    @staticmethod
+    def _match_space(entry: str, all_spaces: list):
+        """Match an entry against the key and then the name of every space, ignoring letter case."""
+        wanted = (entry or "").strip().lower()
+        for field in ("key", "name"):
+            for space in all_spaces:
+                if str(space.get(field, "")).strip().lower() == wanted:
+                    return space
+        return None
 
     def iter_pages(self, timestamp_from: str = None, beautify: bool = True, limit: int = 100,
                    space_keys: list = None):
